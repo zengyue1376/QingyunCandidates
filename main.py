@@ -29,9 +29,9 @@ def get_args():
     parser.add_argument('--maxlen', default=101, type=int)
 
     # new params
-    parser.add_argument('--weight_decay', default=1e-4, type=float, help='Weight decay (AdamW)')
-    parser.add_argument('--warmup_steps', default=3000, type=int, help='Linear warmup steps')
-    parser.add_argument('--clip_grad_norm', default=5.0, type=float, help='Max gradient norm for clipping')
+    parser.add_argument('--weight_decay', default=1e-5, type=float, help='Weight decay (AdamW)')
+    parser.add_argument('--warmup_steps', default=500, type=int, help='Linear warmup steps')
+    parser.add_argument('--clip_grad_norm', default=1.0, type=float, help='Max gradient norm for clipping')
     parser.add_argument('--use_adamw', action='store_true', help='Use AdamW instead of Adam')
 
 
@@ -117,7 +117,7 @@ if __name__ == '__main__':
             model.parameters(),
             lr=args.lr,
             betas=(0.9, 0.98),
-            weight_decay=args.weight_decay  # 仍可用，但语义不如 AdamW 清晰
+            weight_decay=args.weight_decay
         )
 
     scheduler = LambdaLR(optimizer, lr_lambda)
