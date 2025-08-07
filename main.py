@@ -9,15 +9,9 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-from torch.optim.lr_scheduler import LambdaLR
 
 from dataset import MyDataset
 from model import BaselineModel
-
-def lr_lambda(current_step: int):
-    if current_step < args.warmup_steps:
-        return float(current_step) / float(max(1, args.warmup_steps))
-    return 1.0
 
 
 def get_args():
@@ -28,18 +22,11 @@ def get_args():
     parser.add_argument('--lr', default=0.001, type=float)
     parser.add_argument('--maxlen', default=101, type=int)
 
-    # new params
-    parser.add_argument('--weight_decay', default=1e-4, type=float, help='Weight decay (AdamW)')
-    # parser.add_argument('--warmup_steps', default=1000, type=int, help='Linear warmup steps')
-    parser.add_argument('--clip_grad_norm', default=1.0, type=float, help='Max gradient norm for clipping')
-    parser.add_argument('--use_adamw', action='store_true', help='Use AdamW instead of Adam')
-
-
     # Baseline Model construction
-    parser.add_argument('--hidden_units', default=32, type=int)
-    parser.add_argument('--num_blocks', default=1, type=int)
+    parser.add_argument('--hidden_units', default=64, type=int)
+    parser.add_argument('--num_blocks', default=2, type=int)
     parser.add_argument('--num_epochs', default=3, type=int)
-    parser.add_argument('--num_heads', default=1, type=int)
+    parser.add_argument('--num_heads', default=2, type=int)
     parser.add_argument('--dropout_rate', default=0.2, type=float)
     parser.add_argument('--l2_emb', default=0.0, type=float)
     parser.add_argument('--device', default='cuda', type=str)
@@ -103,30 +90,7 @@ if __name__ == '__main__':
             raise RuntimeError('failed loading state_dicts, pls check file path!')
 
     bce_criterion = torch.nn.BCEWithLogitsLoss(reduction='mean')
-    
-    
-    if args.use_adamw:
-        optimizer = torch.optim.AdamW(
-            model.parameters(),
-            lr=args.lr,
-            betas=(0.9, 0.98),
-            weight_decay=args.weight_decay
-        )
-    else:
-        optimizer = torch.optim.Adam(
-            model.parameters(),
-            lr=args.lr,
-            betas=(0.9, 0.98),
-            weight_decay=args.weight_decay
-        )
-    # optimizer = torch.optim.Adam(
-    #         model.parameters(),
-    #         lr=args.lr,
-    #         betas=(0.9, 0.98),
-    #         weight_decay=args.weight_decay
-    #     )
-
-    # scheduler = LambdaLR(optimizer, lr_lambda)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98))
 
     best_val_ndcg, best_val_hr = 0.0, 0.0
     best_test_ndcg, best_test_hr = 0.0, 0.0
@@ -168,12 +132,7 @@ if __name__ == '__main__':
             for param in model.item_emb.parameters():
                 loss += args.l2_emb * torch.norm(param)
             loss.backward()
-            if args.clip_grad_norm > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
-
             optimizer.step()
-            # if global_step < args.warmup_steps:
-            #     scheduler.step()
 
         model.eval()
         valid_loss_sum = 0
