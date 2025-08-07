@@ -25,7 +25,7 @@ def get_args():
 
     # Train params
     parser.add_argument('--batch_size', default=128, type=int)
-    parser.add_argument('--lr', default=0.01, type=float)
+    parser.add_argument('--lr', default=0.001, type=float)
     parser.add_argument('--maxlen', default=101, type=int)
 
     # new params
@@ -168,8 +168,8 @@ if __name__ == '__main__':
             for param in model.item_emb.parameters():
                 loss += args.l2_emb * torch.norm(param)
             loss.backward()
-            if args.clip_grad_norm > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+            # if args.clip_grad_norm > 0:
+            #     torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
 
             optimizer.step()
             if global_step < args.warmup_steps:
