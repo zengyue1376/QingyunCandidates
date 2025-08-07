@@ -315,3 +315,64 @@ def idcg_k(k):
         return 1.0
     else:
         return res
+    
+def parse_user_seqs(data_file:str):  # TODO 用示例代码中的IO方式提升效率
+    """
+    seq.jsonl每一行数据格式为# [user_id, item_id, user_feature, item_feature, action_type, timestamp]
+    返回每个用户的序列，以及所有用户序列拼接在一起的长序列，以及item的个数
+    """
+    lines = open(data_file).readlines()
+    user_seq = []
+    long_sequence = []
+    item_set = set()
+    for line in lines:
+        seq = json.loads(line)
+        items = []
+        for record in seq:
+            if record[1]:  # 有些没有item_id，是user_profile
+                items.append(record[1])
+            # else:
+            #     print(record[2]) # {'103': 53, '106': [4], '109': 2, '105': 7, '104': 1}, usr_profile
+            #     break
+        long_sequence.extend(items)  # 把所有的都弄到一个seq中，用于后续seg取负例
+        user_seq.append(items)
+        item_set = item_set | set(items)  # 用于得到所有的item集合
+    max_item = max(item_set)
+    return user_seq, max_item, long_sequence
+
+def parse_item_attr(data_file):  # TODO 用示例代码中的IO方式提升效率
+    """
+    输入item_feat_dict.json，返回item的属性集合
+    {"112": 14, "117": 80, "118": 249, "119": 1174, "120": 118, "100": 6, "101": 18, "102": 6779, "122": 8307, "114": 16, "116": 6, "121": 28737, "111": 42338}
+    """
+    feat_item_sparse = {
+        '100':set(), # 6
+        '117':set(), # 285
+        '111':set(), # 58734
+        '118':set(),
+        '101':set(),
+        '102':set(), # 11136
+        '119':set(),
+        '120':set(),
+        '114':set(),
+        '112':set(), 
+        '121':set(), # 49079
+        '115':set(),
+        '122':set(), # 11151
+        '116':set(),
+    }
+    feat_item_sparse_attr_size = {}
+    item2attribute = json.loads(open(data_file).readline())
+    for item, attrs in item2attribute.items():
+        for attr, value in attrs.items():
+            feat_item_sparse[attr].add(value)
+    for attr, items in feat_item_sparse.items():
+        feat_item_sparse_attr_size[attr] = max(items)
+    return item2attribute, feat_item_sparse_attr_size
+
+
+
+
+if __name__ == "__main__":
+    # parse_user_seqs("F:\\Work\\202508_TencentAd\\TencentGR_1k\\TencentGR_1k\\seq.jsonl")
+    parse_item_attr("F:\\Work\\202508_TencentAd\\TencentGR_1k\\TencentGR_1k\\item_feat_dict.json")
