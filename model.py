@@ -327,30 +327,12 @@ class BaselineModel(torch.nn.Module):
         seqs += self.pos_emb(poss)
         seqs = self.emb_dropout(seqs)
 
-        # maxlen = seqs.shape[1]
-        # ones_matrix = torch.ones((maxlen, maxlen), dtype=torch.bool, device=self.dev)
-        # attention_mask_tril = torch.tril(ones_matrix)
-        # attention_mask_pad = (mask != 0).to(self.dev)
-        # attention_mask = attention_mask_tril.unsqueeze(0) & attention_mask_pad.unsqueeze(1)
-
-        
         maxlen = seqs.shape[1]
+        ones_matrix = torch.ones((maxlen, maxlen), dtype=torch.bool, device=self.dev)
+        attention_mask_tril = torch.tril(ones_matrix)
+        attention_mask_pad = (mask != 0).to(self.dev)
+        attention_mask = attention_mask_tril.unsqueeze(0) & attention_mask_pad.unsqueeze(1)
 
-        # 1. 因果掩码（下三角矩阵）
-        causal_mask = torch.tril(torch.ones((maxlen, maxlen), dtype=torch.bool, device=self.dev))
-
-        # 2. Padding 掩码（过滤无效的 key 和 value）
-        # mask: [batch_size, maxlen], 1/2 表示有效 token，0 表示 padding
-        padding_mask = (mask != 0).to(self.dev)  # [batch_size, maxlen]
-
-        # 3. 合并因果性和 padding 掩码
-        # key_padding_mask: 不能关注 key 的 padding 位置（mask[i][k] == False）
-        # attention_mask: [batch_size, maxlen, maxlen]
-        attention_mask = (
-            causal_mask.unsqueeze(0)  # [1, maxlen, maxlen]
-            & padding_mask.unsqueeze(1)  # [batch_size, 1, maxlen] -> 过滤 key 的 padding
-            & padding_mask.unsqueeze(2)  # [batch_size, maxlen, 1] -> 过滤 value 的 padding
-        )
 
         for i in range(len(self.attention_layers)):
             if self.norm_first:
