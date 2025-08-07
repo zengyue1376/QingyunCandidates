@@ -3,12 +3,22 @@ import json
 import pickle
 from pathlib import Path
 from tqdm import tqdm
+from collections import defaultdict
 
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset
 
 from utils import neg_sample
+
+class AttrTensorDict(nn.Module):
+    def __init__(self, tensor_dict):
+        super().__init__()
+        # 将字典中的张量注册为 Buffer 或 Parameter
+        for k, v in tensor_dict.items():
+            if isinstance(v, torch.Tensor):
+                self.register_buffer(k, v)  # 或者用 Parameter，看是否需要梯度
 
 
 class S3RecDataset(torch.utils.data.Dataset):
@@ -51,8 +61,14 @@ class S3RecDataset(torch.utils.data.Dataset):
 
 class PretrainDataset(Dataset):
 
-    def __init__(self, args, user_seq, long_sequence):
+    def __init__(self, args, user_seq, long_sequence, mask_p, mask_id, item_size, attribute_size, item2attribute):
         self.args = args
+        self.mask_p = mask_p
+        self.mask_id = mask_id
+        self.item_size = item_size
+        self.attribute_size = attribute_size
+        self.item2attribute = item2attribute
+        self.attr_name = self.attribute_size.keys()
         self.user_seq = user_seq
         self.long_sequence = long_sequence
         self.max_len = args.max_seq_length
@@ -78,16 +94,16 @@ class PretrainDataset(Dataset):
         item_set = set(sequence)
         for item in sequence[:-1]:
             prob = random.random()
-            if prob < self.args.mask_p:
-                masked_item_sequence.append(self.args.mask_id)
-                neg_items.append(neg_sample(item_set, self.args.item_size))
+            if prob < self.mask_p:
+                masked_item_sequence.append(self.mask_id)
+                neg_items.append(neg_sample(item_set, self.item_size))
             else:
                 masked_item_sequence.append(item)
                 neg_items.append(item)
 
         # add mask at the last position
-        masked_item_sequence.append(self.args.mask_id)
-        neg_items.append(neg_sample(item_set, self.args.item_size))
+        masked_item_sequence.append(self.mask_id)
+        neg_items.append(neg_sample(item_set, self.item_size))
 
         # Segment Prediction
         if len(sequence) < 2:
@@ -100,11 +116,11 @@ class PretrainDataset(Dataset):
             neg_start_id = random.randint(0, len(self.long_sequence) - sample_length)
             pos_segment = sequence[start_id: start_id + sample_length]
             neg_segment = self.long_sequence[neg_start_id:neg_start_id + sample_length]
-            masked_segment_sequence = sequence[:start_id] + [self.args.mask_id] * sample_length + sequence[
+            masked_segment_sequence = sequence[:start_id] + [self.mask_id] * sample_length + sequence[
                                                                                       start_id + sample_length:]
-            pos_segment = [self.args.mask_id] * start_id + pos_segment + [self.args.mask_id] * (
+            pos_segment = [self.mask_id] * start_id + pos_segment + [self.mask_id] * (
                         len(sequence) - (start_id + sample_length))
-            neg_segment = [self.args.mask_id] * start_id + neg_segment + [self.args.mask_id] * (
+            neg_segment = [self.mask_id] * start_id + neg_segment + [self.mask_id] * (
                         len(sequence) - (start_id + sample_length))
 
         assert len(masked_segment_sequence) == len(sequence)
@@ -130,19 +146,27 @@ class PretrainDataset(Dataset):
 
         # Associated Attribute Prediction
         # Masked Attribute Prediction
-        attributes = []
-        for item in pos_items:
-            attribute = [0] * self.args.attribute_size
-            try:
-                now_attribute = self.args.item2attribute[str(item)]
-                for a in now_attribute:
-                    attribute[a] = 1
-            except:
-                pass
-            attributes.append(attribute)
+        # 有很多个attr，用dict保存
+        attributes = defaultdict(list)
+        for attr in self.attr_name:
+            for item in pos_items:
+                attribute = [0] * self.attribute_size[attr]
+                try:
+                    now_attribute = self.item2attribute[str(item)][attr]
+                    if isinstance(now_attribute, list):
+                        for a in now_attribute:
+                            attribute[a] = 1
+                    elif isinstance(now_attribute, int):
+                        attribute[now_attribute] = 1
+                    else:
+                        assert 0, "wrong instance"
+                except:
+                    pass
+                attributes[attr].append(list(attribute))
 
 
-        assert len(attributes) == self.max_len
+        for attr in self.attr_name:
+            assert len(attributes[attr]) == self.max_len, f"{attr} do not match the max_len"
         assert len(masked_item_sequence) == self.max_len
         assert len(pos_items) == self.max_len
         assert len(neg_items) == self.max_len
@@ -150,8 +174,11 @@ class PretrainDataset(Dataset):
         assert len(pos_segment) == self.max_len
         assert len(neg_segment) == self.max_len
 
+        for attr, value in attributes.items():
+            attributes[attr] = torch.tensor(value, dtype=torch.long)
 
-        cur_tensors = (torch.tensor(attributes, dtype=torch.long),
+
+        cur_tensors = (attributes,  # 这是一个dict
                        torch.tensor(masked_item_sequence, dtype=torch.long),
                        torch.tensor(pos_items, dtype=torch.long),
                        torch.tensor(neg_items, dtype=torch.long),
@@ -159,11 +186,26 @@ class PretrainDataset(Dataset):
                        torch.tensor(pos_segment, dtype=torch.long),
                        torch.tensor(neg_segment, dtype=torch.long),)
         return cur_tensors
+    
+    def collate_fn(batch):
+        attributes, masked_item_sequence, pos_items, neg_items, masked_segment_sequence, pos_segment, neg_segment = zip(*batch)
+        collated_attributes = {}
+        keys = attributes[0].keys()
+        for k in keys:
+            collated_attributes[k] = torch.stack([d[k] for d in attributes])
+        
+        masked_item_sequence = torch.stack(masked_item_sequence)
+        pos_items = torch.stack(pos_items)
+        neg_items = torch.stack(neg_items)
+        masked_segment_sequence = torch.stack(masked_segment_sequence)
+        pos_segment = torch.stack(pos_segment)
+        neg_segment = torch.stack(neg_segment)
+        return collated_attributes, masked_item_sequence, pos_items, neg_items, masked_segment_sequence, pos_segment, neg_segment
 
 class SASRecDataset(Dataset):
 
     def __init__(self, args, user_seq, test_neg_items=None, data_type='train'):
-        self.args = args
+        self = args
         self.user_seq = user_seq
         self.test_neg_items = test_neg_items
         self.data_type = data_type
@@ -204,7 +246,7 @@ class SASRecDataset(Dataset):
         target_neg = []
         seq_set = set(items)
         for _ in input_ids:
-            target_neg.append(neg_sample(seq_set, self.args.item_size))
+            target_neg.append(neg_sample(seq_set, self.item_size))
 
         pad_len = self.max_len - len(input_ids)
         input_ids = [0] * pad_len + input_ids
@@ -284,6 +326,64 @@ def load_mm_emb(mm_path, feat_ids):
 
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
-    train_dataset = S3RecDataset("F:\\Work\\202508_TencentAd\\TencentGR_1k\\TencentGR_1k", "82")
+    import argparse
+    from utils import parse_user_seqs, parse_item_attr
+
+    parser = argparse.ArgumentParser()
+
+    # parser.add_argument('--data_dir', default='./data/', type=str)
+    parser.add_argument('--output_dir', default='output/', type=str)
+    # parser.add_argument('--data_name', default='Beauty', type=str)
+
+    # model args
+    parser.add_argument("--model_name", default='Pretrain', type=str)
+
+    parser.add_argument("--hidden_size", type=int, default=64, help="hidden size of transformer model")
+    parser.add_argument("--num_hidden_layers", type=int, default=2, help="number of layers")
+    parser.add_argument('--num_attention_heads', default=2, type=int)
+    parser.add_argument('--hidden_act', default="gelu", type=str) # gelu relu
+    parser.add_argument("--attention_probs_dropout_prob", type=float, default=0.5, help="attention dropout p")
+    parser.add_argument("--hidden_dropout_prob", type=float, default=0.5, help="hidden dropout p")
+    parser.add_argument("--initializer_range", type=float, default=0.02)
+    parser.add_argument('--max_seq_length', default=50, type=int)
+
+    # train args
+    parser.add_argument("--lr", type=float, default=0.001, help="learning rate of adam")
+    parser.add_argument("--batch_size", type=int, default=256, help="number of batch_size")
+    parser.add_argument("--epochs", type=int, default=200, help="number of epochs")
+    parser.add_argument("--no_cuda", action="store_true")
+    parser.add_argument("--log_freq", type=int, default=1, help="per epoch print res")
+    parser.add_argument("--seed", default=42, type=int)
+
+    # pre train args
+    parser.add_argument("--pre_epochs", type=int, default=300, help="number of pre_train epochs")
+    parser.add_argument("--pre_batch_size", type=int, default=100)
+
+    parser.add_argument("--mask_p", type=float, default=0.2, help="mask probability")
+    parser.add_argument("--aap_weight", type=float, default=0.2, help="aap loss weight")
+    parser.add_argument("--mip_weight", type=float, default=1.0, help="mip loss weight")
+    parser.add_argument("--map_weight", type=float, default=1.0, help="map loss weight")
+    parser.add_argument("--sp_weight", type=float, default=0.5, help="sp loss weight")
+
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="weight_decay of adam")
+    parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
+    parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam second beta value")
+    parser.add_argument("--gpu_id", type=str, default="0", help="gpu_id")
+
+    parser.add_argument("--local_test", type=str, default=False, help="if local test, use the fixed dataset path")
+
+
+    args = parser.parse_args()
+
+    data_dir = "F:\\Work\\202508_TencentAd\\TencentGR_1k\\TencentGR_1k\\"
+    data_file = Path(data_dir, 'seq.jsonl')
+    item2attribute_file = Path(data_dir, 'item_feat_dict.json')
+    user_seq, max_item, long_sequence = parse_user_seqs(data_file)
+    item2attribute, attribute_size = parse_item_attr(item2attribute_file)
+    item_size = max_item + 2
+    mask_id = max_item + 1
+    attribute_size = {k: v + 1 for k, v in attribute_size.items()}
+    
+    train_dataset = PretrainDataset(args, user_seq, long_sequence, args.mask_p, mask_id, item_size, attribute_size, item2attribute)
     train_loader = DataLoader(train_dataset, batch_size=1)
     print(next(iter(train_loader)))

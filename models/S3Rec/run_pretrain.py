@@ -5,24 +5,25 @@
 import numpy as np
 import random
 import torch
+from pathlib import Path
 from torch.utils.data import DataLoader, RandomSampler
 
 import os
 import argparse
 
-from datasets import PretrainDataset
+from dataset_s3rec import PretrainDataset
 from trainers import PretrainTrainer
-from models import S3RecModel
+from model_s3rec import S3RecModel
 
 
-from utils import get_user_seqs_long, get_item2attribute_json, check_path, set_seed
+from utils import get_user_seqs_long, get_item2attribute_json, check_path, set_seed, parse_user_seqs, parse_item_attr
 
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data_dir', default='./data/', type=str)
+    # parser.add_argument('--data_dir', default='./data/', type=str)
     parser.add_argument('--output_dir', default='output/', type=str)
-    parser.add_argument('--data_name', default='Beauty', type=str)
+    # parser.add_argument('--data_name', default='Beauty', type=str)
 
     # model args
     parser.add_argument("--model_name", default='Pretrain', type=str)
@@ -59,6 +60,8 @@ def main():
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam second beta value")
     parser.add_argument("--gpu_id", type=str, default="0", help="gpu_id")
 
+    parser.add_argument("--local_test", type=str, default=False, help="if local test, use the fixed dataset path")
+
 
     args = parser.parse_args()
 
@@ -68,17 +71,21 @@ def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     args.cuda_condition = torch.cuda.is_available() and not args.no_cuda
 
-    args.data_file = args.data_dir + args.data_name + '.txt'
-    item2attribute_file = args.data_dir + args.data_name + '_item2attributes.json'
+    if args.local_test:
+        args.data_dir = "F:\\Work\\202508_TencentAd\\TencentGR_1k\\TencentGR_1k\\"
+    else:
+        args.data_dir = os.environ.get('TRAIN_DATA_PATH')
+    args.data_file = Path(args.data_dir, 'seq.jsonl')
+    item2attribute_file = Path(args.data_dir, 'item_feat_dict.json')
     # concat all user_seq get a long sequence, from which sample neg segment for SP
-    user_seq, max_item, long_sequence = get_user_seqs_long(args.data_file)
-    item2attribute, attribute_size = get_item2attribute_json(item2attribute_file)
+    user_seq, max_item, long_sequence = parse_user_seqs(args.data_file)
+    item2attribute, attribute_size = parse_item_attr(item2attribute_file)
 
     args.item_size = max_item + 2
     args.mask_id = max_item + 1
-    args.attribute_size = attribute_size + 1
+    args.attribute_size = {k:v + 1 for k, v in attribute_size.items()}
     # save model args
-    args_str = f'{args.model_name}-{args.data_name}'
+    args_str = f'siusiusiu'
     args.log_file = os.path.join(args.output_dir, args_str + '.txt')
     print(args)
     with open(args.log_file, 'a') as f:
@@ -91,7 +98,7 @@ def main():
 
     for epoch in range(args.pre_epochs):
 
-        pretrain_dataset = PretrainDataset(args, user_seq, long_sequence)
+        pretrain_dataset = PretrainDataset(args, user_seq, long_sequence, args.mask_p, args.mask_id, args.item_size, attribute_size, item2attribute)
         pretrain_sampler = RandomSampler(pretrain_dataset)
         pretrain_dataloader = DataLoader(pretrain_dataset, sampler=pretrain_sampler, batch_size=args.pre_batch_size)
 

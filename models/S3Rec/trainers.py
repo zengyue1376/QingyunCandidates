@@ -142,7 +142,7 @@ class PretrainTrainer(Trainer):
                f'SP-{self.args.sp_weight}'
 
         pretrain_data_iter = tqdm.tqdm(enumerate(pretrain_dataloader),
-                                       desc=f"{self.args.model_name}-{self.args.data_name} Epoch:{epoch}",
+                                       desc=f"{self.args.model_name}-{self.args.data_file} Epoch:{epoch}",
                                        total=len(pretrain_dataloader),
                                        bar_format="{l_bar}{r_bar}")
 
@@ -154,9 +154,17 @@ class PretrainTrainer(Trainer):
 
         for i, batch in pretrain_data_iter:
             # 0. batch_data will be sent into the device(GPU or CPU)
-            batch = tuple(t.to(self.device) for t in batch)
             attributes, masked_item_sequence, pos_items, neg_items, \
             masked_segment_sequence, pos_segment, neg_segment = batch
+            
+            attributes = {k: v.to(self.device) for k, v in attributes.items()}
+            masked_item_sequence = masked_item_sequence.to(self.device)
+            pos_items = pos_items.to(self.device)
+            neg_items = neg_items.to(self.device)
+            masked_segment_sequence = masked_segment_sequence.to(self.device)
+            pos_segment = pos_segment.to(self.device)
+            neg_segment = neg_segment.to(self.device)
+
 
             aap_loss, mip_loss, map_loss, sp_loss = self.model.pretrain(attributes,
                                             masked_item_sequence, pos_items, neg_items,
