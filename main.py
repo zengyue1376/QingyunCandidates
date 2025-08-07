@@ -30,7 +30,7 @@ def get_args():
 
     # new params
     parser.add_argument('--weight_decay', default=1e-5, type=float, help='Weight decay (AdamW)')
-    parser.add_argument('--warmup_steps', default=500, type=int, help='Linear warmup steps')
+    parser.add_argument('--warmup_steps', default=1000, type=int, help='Linear warmup steps')
     parser.add_argument('--clip_grad_norm', default=1.0, type=float, help='Max gradient norm for clipping')
     parser.add_argument('--use_adamw', action='store_true', help='Use AdamW instead of Adam')
 
@@ -105,15 +105,21 @@ if __name__ == '__main__':
     bce_criterion = torch.nn.BCEWithLogitsLoss(reduction='mean')
     
     
-    if args.use_adamw:
-        optimizer = torch.optim.AdamW(
-            model.parameters(),
-            lr=args.lr,
-            betas=(0.9, 0.98),
-            weight_decay=args.weight_decay
-        )
-    else:
-        optimizer = torch.optim.Adam(
+    # if args.use_adamw:
+    #     optimizer = torch.optim.AdamW(
+    #         model.parameters(),
+    #         lr=args.lr,
+    #         betas=(0.9, 0.98),
+    #         weight_decay=args.weight_decay
+    #     )
+    # else:
+    #     optimizer = torch.optim.Adam(
+    #         model.parameters(),
+    #         lr=args.lr,
+    #         betas=(0.9, 0.98),
+    #         weight_decay=args.weight_decay
+    #     )
+    optimizer = torch.optim.Adam(
             model.parameters(),
             lr=args.lr,
             betas=(0.9, 0.98),
