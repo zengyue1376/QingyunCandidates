@@ -68,7 +68,7 @@ def main():
     set_seed(args.seed)
     check_path(args.output_dir)
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     args.cuda_condition = torch.cuda.is_available() and not args.no_cuda
 
     if args.local_test:
@@ -78,7 +78,9 @@ def main():
     args.data_file = Path(args.data_dir, 'seq.jsonl')
     item2attribute_file = Path(args.data_dir, 'item_feat_dict.json')
     # concat all user_seq get a long sequence, from which sample neg segment for SP
+    print('*'*10, '\n', "Starting parse user seqs")
     user_seq, max_item, long_sequence = parse_user_seqs(args.data_file)
+    print('*'*10, '\n', "Starting parse item2attr file")
     item2attribute, attribute_size = parse_item_attr(item2attribute_file)
 
     args.item_size = max_item + 2
