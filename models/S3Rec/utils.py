@@ -9,6 +9,7 @@ import os
 import json
 import pickle
 from scipy.sparse import csr_matrix
+from tqdm import tqdm
 
 import torch
 import torch.nn.functional as F
@@ -325,7 +326,7 @@ def parse_user_seqs(data_file:str):  # TODO 用示例代码中的IO方式提升�
     user_seq = []
     long_sequence = []
     item_set = set()
-    for line in lines:
+    for line in tqdm(lines):
         seq = json.loads(line)
         items = []
         for record in seq:
@@ -363,10 +364,10 @@ def parse_item_attr(data_file):  # TODO 用示例代码中的IO方式提升效�
     }
     feat_item_sparse_attr_size = {}
     item2attribute = json.loads(open(data_file).readline())
-    for item, attrs in item2attribute.items():
+    for item, attrs in tqdm(item2attribute.items()):
         for attr, value in attrs.items():
             feat_item_sparse[attr].add(value)
-    for attr, items in feat_item_sparse.items():
+    for attr, items in tqdm(feat_item_sparse.items()):
         feat_item_sparse_attr_size[attr] = max(items)
     return item2attribute, feat_item_sparse_attr_size
 

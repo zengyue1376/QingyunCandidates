@@ -105,8 +105,8 @@ def main():
         trainer.pretrain(epoch, pretrain_dataloader)
 
         if (epoch+1) % 10 == 0:
-            ckp = f'{args.data_name}-epochs-{epoch+1}.pt'
-            checkpoint_path = os.path.join(args.output_dir, ckp)
+            checkpoint_path = Path(os.environ.get('TRAIN_CKPT_PATH'), f"global_step{epoch}")
+            checkpoint_path.mkdir(parents=True, exist_ok=True)
             trainer.save(checkpoint_path)
 
 
