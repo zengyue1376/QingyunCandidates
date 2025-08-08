@@ -107,9 +107,7 @@ class S3RecModel(nn.Module):
         # [B L H]
         sequence_output = encoded_layers[-1]
 
-        attribute_embeddings = nn.ModuleDict({
-            k: self.attribute_embeddings[k].weight for k in self.attr_name
-        })
+        attribute_embeddings = {k: self.attribute_embeddings[k].weight for k in self.attr_name}
         # AAP
         aap_score = self.associated_attribute_prediction(sequence_output, attribute_embeddings)
         # only compute loss at non-masked position

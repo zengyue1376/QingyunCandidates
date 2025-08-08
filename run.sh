@@ -7,4 +7,4 @@ echo ${RUNTIME_SCRIPT_DIR}
 cd ${RUNTIME_SCRIPT_DIR}/models/S3Rec
 
 # write your code below
-python -u main.py
+python -u run_pretrain.py
