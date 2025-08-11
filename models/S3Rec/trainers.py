@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 
-from utils import recall_at_k, ndcg_k, get_metric
+from utils import recall_at_k, ndcg_k, get_metric, print_memory
 
 
 class Trainer:
@@ -146,8 +146,9 @@ class PretrainTrainer(Trainer):
                                        desc=f"{self.args.model_name}-{self.args.data_file} Epoch:{epoch}",
                                        total=len(pretrain_dataloader),
                                        bar_format="{l_bar}{r_bar}")
-
+        print_memory("MEMORY BEFORE 'self.model.train'")
         self.model.train()
+        print_memory("MEMORY AFTER 'self.model.train'")
         aap_loss_avg = 0.0
         mip_loss_avg = 0.0
         map_loss_avg = 0.0
@@ -157,7 +158,7 @@ class PretrainTrainer(Trainer):
             # 0. batch_data will be sent into the device(GPU or CPU)
             attributes, masked_item_sequence, pos_items, neg_items, \
             masked_segment_sequence, pos_segment, neg_segment = batch
-            
+            # print_memory("MEMORY AFTER 'attributes, masked_item_sequence, pos_items, neg_items, masked_segment_sequence, pos_segment, neg_segment = batch'")
             attributes = {k: v.to(self.device) for k, v in attributes.items()}
             masked_item_sequence = masked_item_sequence.to(self.device)
             pos_items = pos_items.to(self.device)
@@ -165,7 +166,7 @@ class PretrainTrainer(Trainer):
             masked_segment_sequence = masked_segment_sequence.to(self.device)
             pos_segment = pos_segment.to(self.device)
             neg_segment = neg_segment.to(self.device)
-
+            # print_memory("MEMORY AFTER 'data.to(self.device)'")
 
             aap_loss, mip_loss, map_loss, sp_loss = self.model.pretrain(attributes,
                                             masked_item_sequence, pos_items, neg_items,
@@ -175,7 +176,6 @@ class PretrainTrainer(Trainer):
                          self.args.mip_weight * mip_loss + \
                          self.args.map_weight * map_loss + \
                          self.args.sp_weight * sp_loss
-
             self.optim.zero_grad()
             joint_loss.backward()
             self.optim.step()

@@ -11,10 +11,19 @@ import pickle
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
 from pathlib import Path
+import psutil
 
 
 import torch
 import torch.nn.functional as F
+
+def print_memory(msg=""):
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / 1024 / 1024 / 1024  # GB
+    print(f"{msg} | CPU Memory: {mem:.2f} GB")
+    if torch.cuda.is_available():
+        gpu_mem = torch.cuda.memory_reserved(0) / 1024 / 1024 / 1024
+        print(f"{msg} | GPU Memory: {gpu_mem:.2f} GB")
 
 def set_seed(seed):
     random.seed(seed)
@@ -382,17 +391,17 @@ def parse_item_set(data_dir):
     feat_item_sparse = {
         '100':set(), # 6
         '117':set(), # 285
-        '111':set(), # 58734
+        # '111':set(), # 58734s
         '118':set(),
         '101':set(),
-        '102':set(), # 11136
+        # '102':set(), # 11136
         '119':set(),
         '120':set(),
         '114':set(),
         '112':set(), 
-        '121':set(), # 49079
+        # '121':set(), # 49079
         '115':set(),
-        '122':set(), # 11151
+        # '122':set(), # 11151
         '116':set(),
     }
     for item_idx, attrs in item2attribute.items():

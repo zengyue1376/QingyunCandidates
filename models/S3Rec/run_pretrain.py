@@ -16,7 +16,7 @@ from trainers import PretrainTrainer
 from model_s3rec import S3RecModel
 
 
-from utils import get_user_seqs_long, get_item2attribute_json, check_path, set_seed, parse_user_seqs, parse_item_attr, parse_item_set
+from utils import get_user_seqs_long, get_item2attribute_json, check_path, set_seed, parse_user_seqs, parse_item_attr, parse_item_set, print_memory
 
 def main():
     parser = argparse.ArgumentParser()
@@ -65,8 +65,8 @@ def main():
 
     args = parser.parse_args()
 
-    set_seed(args.seed)
-    check_path(args.output_dir)
+    # set_seed(args.seed)
+    # check_path(args.output_dir)
 
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     args.cuda_condition = torch.cuda.is_available() and not args.no_cuda
@@ -94,10 +94,10 @@ def main():
     args.log_file.flush()
 
     args.item2attribute = item2attribute
-
+    print_memory("MEMORY BEFORE 'model = S3RecModel(args=args)'")
     model = S3RecModel(args=args)
     trainer = PretrainTrainer(model, None, None, None, args)
-
+    print_memory("MEMORY BEFORE 'for epoch in range(args.pre_epochs):'")
     for epoch in range(args.pre_epochs):
 
         pretrain_dataset = PretrainDataset(args, args.mask_p, args.mask_id, args.item_size, args.attribute_size, item2attribute, args.data_dir)

@@ -7,4 +7,5 @@ echo ${RUNTIME_SCRIPT_DIR}
 cd ${RUNTIME_SCRIPT_DIR}/models/S3Rec
 
 # write your code below
-python -u run_pretrain.py
+python -u run_pretrain.py --pre_batch_size 16
+
