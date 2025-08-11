@@ -73,8 +73,12 @@ def main():
 
     if args.local_test:
         args.data_dir = "F:\\Work\\202508_TencentAd\\TencentGR_1k\\TencentGR_1k\\"
+        log_file = open(Path("E:\\zengyue\\QingyunCandidates\\models\\S3Rec\\output", 'train.log'), 'w')
     else:
         args.data_dir = os.environ.get('TRAIN_DATA_PATH')
+        Path(os.environ.get('TRAIN_LOG_PATH')).mkdir(parents=True, exist_ok=True)
+        Path(os.environ.get('TRAIN_TF_EVENTS_PATH')).mkdir(parents=True, exist_ok=True)
+        log_file = open(Path(os.environ.get('TRAIN_LOG_PATH'), 'train.log'), 'w')
     args.data_file = Path(args.data_dir, 'seq.jsonl')
     # concat all user_seq get a long sequence, from which sample neg segment for SP
     print('*'*10, '\n', "Starting parse item2attr file")
@@ -84,11 +88,10 @@ def main():
     args.mask_id = max_item + 1
     args.attribute_size = {k:v + 1 for k, v in attribute_size.items()}
     # save model args
-    args_str = f'siusiusiu'
-    args.log_file = os.path.join(args.output_dir, args_str + '.txt')
     print(args)
-    with open(args.log_file, 'a') as f:
-        f.write(str(args) + '\n')
+    args.log_file = log_file
+    args.log_file.write(str(args) + '\n')
+    args.log_file.flush()
 
     args.item2attribute = item2attribute
 
@@ -102,11 +105,17 @@ def main():
         pretrain_dataloader = DataLoader(pretrain_dataset, sampler=pretrain_sampler, batch_size=args.pre_batch_size)
 
         trainer.pretrain(epoch, pretrain_dataloader)
+        
 
-        if (epoch+1) % 10 == 0:
-            checkpoint_path = Path(os.environ.get('TRAIN_CKPT_PATH'), f"global_step{epoch}")
-            checkpoint_path.mkdir(parents=True, exist_ok=True)
-            trainer.save(checkpoint_path)
+        if (epoch) % 10 == 0:
+            if args.local_test:
+                checkpoint_path = Path("E:\\zengyue\\QingyunCandidates\\models\\S3Rec\\output", f"global_step{epoch}")
+                checkpoint_path.mkdir(parents=True, exist_ok=True)
+                trainer.save(Path(checkpoint_path, "ckpt.pt"))
+            else:
+                checkpoint_path = Path(os.environ.get('TRAIN_CKPT_PATH'), f"global_step{epoch}")
+                checkpoint_path.mkdir(parents=True, exist_ok=True)
+                trainer.save(Path(checkpoint_path, "ckpt.pt"))
 
 
 main()

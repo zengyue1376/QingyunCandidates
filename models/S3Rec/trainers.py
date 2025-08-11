@@ -5,6 +5,7 @@
 import numpy as np
 import tqdm
 import random
+import json
 
 import torch
 import torch.nn as nn
@@ -192,11 +193,19 @@ class PretrainTrainer(Trainer):
             "map_loss_avg": '{:.4f}'.format(map_loss_avg / num),
             "sp_loss_avg": '{:.4f}'.format(sp_loss_avg / num),
         }
+        log_json = json.dumps(
+                {
+                    "epoch": epoch,
+                    "aap_loss_avg": '{:.4f}'.format(aap_loss_avg /num),
+                    "mip_loss_avg": '{:.4f}'.format(mip_loss_avg /num),
+                    "map_loss_avg": '{:.4f}'.format(map_loss_avg / num),
+                    "sp_loss_avg": '{:.4f}'.format(sp_loss_avg / num),
+                }
+            )
         print(desc)
         print(str(post_fix))
-        with open(self.args.log_file, 'a') as f:
-            f.write(str(desc) + '\n')
-            f.write(str(post_fix) + '\n')
+        self.args.log_file.write(log_json + '\n')
+        self.args.log_file.flush()
 
 class FinetuneTrainer(Trainer):
 
