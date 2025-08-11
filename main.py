@@ -12,6 +12,34 @@ from tqdm import tqdm
 
 from dataset import MyDataset
 from model import BaselineModel
+import torch.nn.functional as F
+
+
+def compute_triplet_loss(pos_logits, neg_logits, mask, margin=1.0):
+    losses = torch.relu(margin - (pos_logits - neg_logits))
+    if mask is not None:
+        losses = losses * mask
+        num_valid = mask.sum()
+        loss = losses.sum() / (num_valid + 1e-8)
+    else:
+        loss = losses.mean()
+    return loss
+
+def compute_infonce_loss(pos_logits, neg_logits, mask, temperature=0.1):
+    logits_diff = (pos_logits - neg_logits) / temperature
+    losses = F.binary_cross_entropy_with_logits(
+        logits_diff,
+        torch.ones_like(logits_diff),
+        reduction='none'
+    )
+    if mask is not None:
+        losses = losses * mask
+        num_valid = mask.sum()
+        loss = losses.sum() / (num_valid + 1e-8)
+    else:
+        loss = losses.mean()
+    return loss
+
 
 
 def get_args():
@@ -114,9 +142,16 @@ if __name__ == '__main__':
                 neg_logits.shape, device=args.device
             )
             optimizer.zero_grad()
-            indices = np.where(next_token_type == 1)
-            loss = bce_criterion(pos_logits[indices], pos_labels[indices])
-            loss += bce_criterion(neg_logits[indices], neg_labels[indices])
+            # indices = np.where(next_token_type == 1)
+            # loss = bce_criterion(pos_logits[indices], pos_labels[indices])
+            # loss += bce_criterion(neg_logits[indices], neg_labels[indices])
+            mask = (next_token_type == 1).to(args.device)
+
+            loss_triplet = compute_triplet_loss(pos_logits, neg_logits, mask, margin=1.0)
+            loss_infonce = compute_infonce_loss(pos_logits, neg_logits, mask, temperature=0.1)
+
+            loss = 0.5 * loss_triplet + 0.5 * loss_infonce
+
 
             log_json = json.dumps(
                 {'global_step': global_step, 'loss': loss.item(), 'epoch': epoch, 'time': time.time()}
@@ -125,6 +160,8 @@ if __name__ == '__main__':
             log_file.flush()
             print(log_json)
 
+            writer.add_scalar('Loss/train_triplet', loss_triplet.item(), global_step)
+            writer.add_scalar('Loss/train_infonce', loss_infonce.item(), global_step)
             writer.add_scalar('Loss/train', loss.item(), global_step)
 
             global_step += 1
