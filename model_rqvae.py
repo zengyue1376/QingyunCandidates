@@ -18,7 +18,7 @@ from sklearn.cluster import KMeans
 #         feature_id = MM emb ID
 #     """
 
-#     def __init__(self, data_dir, feature_id):
+#     def __init__(self, data_dir, featurel_id):
 #         super().__init__()
 #         self.data_dir = Path(data_dir)
 #         self.mm_emb_id = [feature_id]

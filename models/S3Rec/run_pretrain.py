@@ -16,7 +16,7 @@ from trainers import PretrainTrainer
 from model_s3rec import S3RecModel
 
 
-from utils import get_user_seqs_long, get_item2attribute_json, check_path, set_seed, parse_user_seqs, parse_item_attr
+from utils import get_user_seqs_long, get_item2attribute_json, check_path, set_seed, parse_user_seqs, parse_item_attr, parse_item_set
 
 def main():
     parser = argparse.ArgumentParser()
@@ -76,12 +76,9 @@ def main():
     else:
         args.data_dir = os.environ.get('TRAIN_DATA_PATH')
     args.data_file = Path(args.data_dir, 'seq.jsonl')
-    item2attribute_file = Path(args.data_dir, 'item_feat_dict.json')
     # concat all user_seq get a long sequence, from which sample neg segment for SP
-    print('*'*10, '\n', "Starting parse user seqs")
-    user_seq, max_item, long_sequence = parse_user_seqs(args.data_file)
     print('*'*10, '\n', "Starting parse item2attr file")
-    item2attribute, attribute_size = parse_item_attr(item2attribute_file)
+    max_item, attribute_size, item2attribute = parse_item_set(args.data_dir)
 
     args.item_size = max_item + 2
     args.mask_id = max_item + 1
@@ -100,7 +97,7 @@ def main():
 
     for epoch in range(args.pre_epochs):
 
-        pretrain_dataset = PretrainDataset(args, user_seq, long_sequence, args.mask_p, args.mask_id, args.item_size, attribute_size, item2attribute)
+        pretrain_dataset = PretrainDataset(args, args.mask_p, args.mask_id, args.item_size, args.attribute_size, item2attribute, args.data_dir)
         pretrain_sampler = RandomSampler(pretrain_dataset)
         pretrain_dataloader = DataLoader(pretrain_dataset, sampler=pretrain_sampler, batch_size=args.pre_batch_size)
 

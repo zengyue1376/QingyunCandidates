@@ -61,7 +61,7 @@ class S3RecDataset(torch.utils.data.Dataset):
 
 class PretrainDataset(Dataset):
 
-    def __init__(self, args, user_seq, long_sequence, mask_p, mask_id, item_size, attribute_size, item2attribute):
+    def __init__(self, args, mask_p, mask_id, item_size, attribute_size, item2attribute, data_dir):
         self.args = args
         self.mask_p = mask_p
         self.mask_id = mask_id
@@ -69,11 +69,16 @@ class PretrainDataset(Dataset):
         self.attribute_size = attribute_size
         self.item2attribute = item2attribute
         self.attr_name = self.attribute_size.keys()
-        self.user_seq = user_seq
-        self.long_sequence = long_sequence
+        # self.user_seq = user_seq
+        # self.long_sequence = long_sequence
         self.max_len = args.max_seq_length
         self.part_sequence = []
-        self.split_sequence()
+        self.data_dir = data_dir
+        # self.split_sequence()
+
+        self.data_file = None
+        self.seq_offsets = None
+        self.load_data_and_offsets()
 
     def split_sequence(self):
         for seq in self.user_seq:
@@ -82,11 +87,25 @@ class PretrainDataset(Dataset):
                 self.part_sequence.append(input_ids[:i+1])
 
     def __len__(self):
-        return len(self.part_sequence)
+        return len(self.seq_offsets)
+
+    def get_segment_neg_seq(self, sample_length):
+        "用于预训练额时候SP取负样本"
+        neg_sample = []
+        while len(neg_sample) < sample_length:
+            random_idx = random.randint(0, len(self.seq_offsets) - 1)
+            random_sample = self.load_usr_data(random_idx)
+            neg_sample.extend(random_sample)
+        random_idx = random.randint(0, len(neg_sample)- sample_length)
+        return neg_sample[random_idx:random_idx+sample_length]
 
     def __getitem__(self, index):
 
-        sequence = self.part_sequence[index] # pos_items
+        # sequence = self.part_sequence[index] # pos_items
+        usr_seq = self.load_usr_data(index)  # 动态加载用户数据
+        input_ids = usr_seq[-(self.max_len+2):-2] # keeping same as train set, last 2 for test?
+        sequence = input_ids[:random.randint(0, len(input_ids))]
+        
         # sample neg item for every masked item
         masked_item_sequence = []
         neg_items = []
@@ -113,9 +132,8 @@ class PretrainDataset(Dataset):
         else:
             sample_length = random.randint(1, len(sequence) // 2)
             start_id = random.randint(0, len(sequence) - sample_length)
-            neg_start_id = random.randint(0, len(self.long_sequence) - sample_length)
             pos_segment = sequence[start_id: start_id + sample_length]
-            neg_segment = self.long_sequence[neg_start_id:neg_start_id + sample_length]
+            neg_segment = self.get_segment_neg_seq(sample_length)
             masked_segment_sequence = sequence[:start_id] + [self.mask_id] * sample_length + sequence[
                                                                                       start_id + sample_length:]
             pos_segment = [self.mask_id] * start_id + pos_segment + [self.mask_id] * (
@@ -201,6 +219,22 @@ class PretrainDataset(Dataset):
         pos_segment = torch.stack(pos_segment)
         neg_segment = torch.stack(neg_segment)
         return collated_attributes, masked_item_sequence, pos_items, neg_items, masked_segment_sequence, pos_segment, neg_segment
+
+    def load_data_and_offsets(self):
+        self.data_file = open(Path(self.data_dir, "seq.jsonl"), 'rb')
+        with open(Path(self.data_dir, 'seq_offsets.pkl'), 'rb') as f:
+            self.seq_offsets = pickle.load(f)
+
+    def load_usr_data(self, uid):
+        self.data_file.seek(self.seq_offsets[uid])
+        line = self.data_file.readline()
+        data = json.loads(line)
+        sequence = []
+        for record_tuple in data:
+            u, i, user_feat, item_feat, action_type, _ = record_tuple
+            if i and item_feat and action_type:
+                sequence.append(i)
+        return sequence
 
 class SASRecDataset(Dataset):
 
@@ -327,7 +361,7 @@ def load_mm_emb(mm_path, feat_ids):
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
     import argparse
-    from utils import parse_user_seqs, parse_item_attr
+    from utils import parse_user_seqs, parse_item_attr, parse_item_set
 
     parser = argparse.ArgumentParser()
 
@@ -378,12 +412,27 @@ if __name__ == "__main__":
     data_dir = "F:\\Work\\202508_TencentAd\\TencentGR_1k\\TencentGR_1k\\"
     data_file = Path(data_dir, 'seq.jsonl')
     item2attribute_file = Path(data_dir, 'item_feat_dict.json')
-    user_seq, max_item, long_sequence = parse_user_seqs(data_file)
-    item2attribute, attribute_size = parse_item_attr(item2attribute_file)
+    # user_seq, max_item, long_sequence = parse_user_seqs(data_file)
+    # item2attribute, attribute_size = parse_item_attr(item2attribute_file)
+
+    # max_item, attribute_size, item2attribute = parse_item_set(args.data_dir)
+    # item_size = max_item + 2
+    # mask_id = max_item + 1
+    # attribute_size = {k: v + 1 for k, v in attribute_size.items()}
+    print('*'*10, '\n', "Starting parse item2attr file")
+    max_item, attribute_size, item2attribute = parse_item_set(data_dir)
+
     item_size = max_item + 2
     mask_id = max_item + 1
-    attribute_size = {k: v + 1 for k, v in attribute_size.items()}
+    attribute_size = {k:v + 1 for k, v in attribute_size.items()}
+    # save model args
+    args_str = f'siusiusiu'
     
-    train_dataset = PretrainDataset(args, user_seq, long_sequence, args.mask_p, mask_id, item_size, attribute_size, item2attribute)
+    train_dataset = PretrainDataset(args, args.mask_p, mask_id, item_size, attribute_size, item2attribute, data_dir)
     train_loader = DataLoader(train_dataset, batch_size=1)
-    print(next(iter(train_loader)))
+    batch = next(iter(train_loader))
+    attributes, masked_item_sequence, pos_items, neg_items, \
+    masked_segment_sequence, pos_segment, neg_segment = batch
+    # attributes = {k: v.to(self.device) for k, v in attributes.items()}
+    for k, v in attributes.items():
+        print(v.shape)

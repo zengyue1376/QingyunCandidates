@@ -10,6 +10,8 @@ import json
 import pickle
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
+from pathlib import Path
+
 
 import torch
 import torch.nn.functional as F
@@ -48,45 +50,45 @@ class EarlyStopping:
             delta (float): Minimum change in the monitored quantity to qualify as an improvement.
                             Default: 0
         """
-        self.checkpoint_path = checkpoint_path
-        self.patience = patience
-        self.verbose = verbose
-        self.counter = 0
-        self.best_score = None
-        self.early_stop = False
-        self.delta = delta
+        checkpoint_path = checkpoint_path
+        patience = patience
+        verbose = verbose
+        counter = 0
+        best_score = None
+        early_stop = False
+        delta = delta
 
     def compare(self, score):
         for i in range(len(score)):
             # 有一个指标增加了就认为是还在涨
-            if score[i] > self.best_score[i]+self.delta:
+            if score[i] > best_score[i]+delta:
                 return False
         return True
 
     def __call__(self, score, model):
         # score HIT@10 NDCG@10
 
-        if self.best_score is None:
-            self.best_score = score
-            self.score_min = np.array([0]*len(score))
-            self.save_checkpoint(score, model)
-        elif self.compare(score):
-            self.counter += 1
-            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
-            if self.counter >= self.patience:
-                self.early_stop = True
+        if best_score is None:
+            best_score = score
+            score_min = np.array([0]*len(score))
+            save_checkpoint(score, model)
+        elif compare(score):
+            counter += 1
+            print(f'EarlyStopping counter: {counter} out of {patience}')
+            if counter >= patience:
+                early_stop = True
         else:
-            self.best_score = score
-            self.save_checkpoint(score, model)
-            self.counter = 0
+            best_score = score
+            save_checkpoint(score, model)
+            counter = 0
 
     def save_checkpoint(self, score, model):
         '''Saves model when validation loss decrease.'''
-        if self.verbose:
-            # ({self.score_min:.6f} --> {score:.6f}) # 这里如果是一个值的话输出才不会有问题
+        if verbose:
+            # ({score_min:.6f} --> {score:.6f}) # 这里如果是一个值的话输出才不会有问题
             print(f'Validation score increased.  Saving model ...')
-        torch.save(model.state_dict(), self.checkpoint_path)
-        self.score_min = score
+        torch.save(model.state_dict(), checkpoint_path)
+        score_min = score
 
 def kmax_pooling(x, dim, k):
     index = x.topk(k, dim=dim)[1].sort(dim=dim)[0]
@@ -326,11 +328,11 @@ def parse_user_seqs(data_file:str):  # TODO 用示例代码中的IO方式提升�
     user_seq = []
     long_sequence = []
     item_set = set()
-    for line in tqdm(lines):
+    for line in lines:
         seq = json.loads(line)
         items = []
         for record in seq:
-            if record[1]:  # 有些没有item_id，是user_profile
+            if record[1] and record[4]:  # 有些没有item_id，是user_profile
                 items.append(record[1])
             # else:
             #     print(record[2]) # {'103': 53, '106': [4], '109': 2, '105': 7, '104': 1}, usr_profile
@@ -371,7 +373,55 @@ def parse_item_attr(data_file):  # TODO 用示例代码中的IO方式提升效�
         feat_item_sparse_attr_size[attr] = max(items)
     return item2attribute, feat_item_sparse_attr_size
 
+def parse_item_set(data_dir): 
+    "获得item的attr，item的个数，以及每个attr的个数，便于构建后续的embedding table大小"
+    item2attribute = json.load(open(Path(data_dir, "item_feat_dict.json"), 'r'))
+    max_item = len(item2attribute)  # 统计总共有多少分item
 
+    # 统计每个离散特征对应多少个attr
+    feat_item_sparse = {
+        '100':set(), # 6
+        '117':set(), # 285
+        '111':set(), # 58734
+        '118':set(),
+        '101':set(),
+        '102':set(), # 11136
+        '119':set(),
+        '120':set(),
+        '114':set(),
+        '112':set(), 
+        '121':set(), # 49079
+        '115':set(),
+        '122':set(), # 11151
+        '116':set(),
+    }
+    for item_idx, attrs in item2attribute.items():
+        for attr in feat_item_sparse.keys():
+            if attr in attrs.keys():
+                feat_item_sparse[attr].add(attrs[attr])
+    feat_item_sparse_attr_size = {}
+    for attr, items in feat_item_sparse.items():
+        feat_item_sparse_attr_size[attr] = max(items)
+
+    return max_item, feat_item_sparse_attr_size, item2attribute
+    
+
+
+
+
+
+
+def load_data_and_offsets(data_dir):
+    data_file = open(data_dir / "seq.jsonl", 'rb')
+    with open(Path(data_dir, 'seq_offsets.pkl'), 'rb') as f:
+        seq_offsets = pickle.load(f)
+    return data_file, seq_offsets
+
+def load_usr_data(data_file, seq_offsets, uid):
+    data_file.seek(seq_offsets[uid])
+    line = data_file.readline()
+    data = json.loads(line)
+    return data
 
 
 if __name__ == "__main__":
