@@ -25,20 +25,7 @@ def compute_triplet_loss(pos_logits, neg_logits, mask, margin=1.0):
         loss = losses.mean()
     return loss
 
-def compute_infonce_loss(pos_logits, neg_logits, mask, temperature=0.1):
-    logits_diff = (pos_logits - neg_logits) / temperature
-    losses = F.binary_cross_entropy_with_logits(
-        logits_diff,
-        torch.ones_like(logits_diff),
-        reduction='none'
-    )
-    if mask is not None:
-        losses = losses * mask
-        num_valid = mask.sum()
-        loss = losses.sum() / (num_valid + 1e-8)
-    else:
-        loss = losses.mean()
-    return loss
+
 
 
 
@@ -135,22 +122,41 @@ if __name__ == '__main__':
             seq = seq.to(args.device)
             pos = pos.to(args.device)
             neg = neg.to(args.device)
-            pos_logits, neg_logits = model(
+            pos_logits, neg_logits, seq_embs, pos_embs, neg_embs = model(
                 seq, pos, neg, token_type, next_token_type, next_action_type, seq_feat, pos_feat, neg_feat
             )
             pos_labels, neg_labels = torch.ones(pos_logits.shape, device=args.device), torch.zeros(
                 neg_logits.shape, device=args.device
             )
             optimizer.zero_grad()
-            # indices = np.where(next_token_type == 1)
-            # loss = bce_criterion(pos_logits[indices], pos_labels[indices])
-            # loss += bce_criterion(neg_logits[indices], neg_labels[indices])
+            indices = np.where(next_token_type == 1)
+            bceloss = bce_criterion(pos_logits[indices], pos_labels[indices])
+            bceloss += bce_criterion(neg_logits[indices], neg_labels[indices])
+
+            def compute_infonce_loss(self, seq_embs, pos_embs, neg_embs, loss_mask, temperature=0.1):
+                hidden_size = neg_embs.size (-1)
+                seq_embs = seq_embs / seq_embs.norm(dim=-1, keepdim=True)
+                pos_embs = pos_embs / pos_embs.norm(dim=-1, keepdim=True)
+                pos_logits = F.cosine_similarity(seq_embs, pos_embs, dim=-1).unsqueeze(-1)
+                writer.add_scalar("Model/nce_pos_logits", pos_logits.mean().item())
+                neg_embs = neg_embs / neg_embs.norm(dim=-1, keepdim=True)
+
+                neg_embedding_all = neg_embs.reshape(-1, hidden_size)
+                neg_logits = torch.matmul(seq_embs, neg_embedding_all.transpose(-1, -2))
+                writer.add_scalar("Model/nce_neg_logits", neg_logits.mean().item())
+                logits = torch.cat([pos_logits, neg_logits], dim=-1)
+                logits = logits[loss_mask.bool()] / temperature
+                labels = torch.zeros(logits.size(0), device=logits.device, dtype=torch. int64)
+                loss = F.cross_entropy(logits, labels)
+                return loss
+
+
             mask = (next_token_type == 1).to(args.device)
 
             loss_triplet = compute_triplet_loss(pos_logits, neg_logits, mask, margin=1.0)
             loss_infonce = compute_infonce_loss(pos_logits, neg_logits, mask, temperature=0.1)
 
-            loss = 0.5 * loss_triplet + 0.5 * loss_infonce
+            loss = 0.2 * loss_triplet + 0.5 * loss_infonce + 0.3 * bceloss
 
 
             log_json = json.dumps(
@@ -178,7 +184,7 @@ if __name__ == '__main__':
             seq = seq.to(args.device)
             pos = pos.to(args.device)
             neg = neg.to(args.device)
-            pos_logits, neg_logits = model(
+            pos_logits, neg_logits, seq_embs, pos_embs, neg_embs = model(
                 seq, pos, neg, token_type, next_token_type, next_action_type, seq_feat, pos_feat, neg_feat
             )
             pos_labels, neg_labels = torch.ones(pos_logits.shape, device=args.device), torch.zeros(

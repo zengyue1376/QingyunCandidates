@@ -375,13 +375,14 @@ class BaselineModel(torch.nn.Module):
 
         pos_embs = self.feat2emb(pos_seqs, pos_feature, include_user=False)
         neg_embs = self.feat2emb(neg_seqs, neg_feature, include_user=False)
+        seq_embs = self.feat2emb(user_item, seq_feature, include_user=False)
 
         pos_logits = (log_feats * pos_embs).sum(dim=-1)
         neg_logits = (log_feats * neg_embs).sum(dim=-1)
         pos_logits = pos_logits * loss_mask
         neg_logits = neg_logits * loss_mask
 
-        return pos_logits, neg_logits
+        return pos_logits, neg_logits, seq_embs, pos_embs, neg_embs
 
     def predict(self, log_seqs, seq_feature, mask):
         """
