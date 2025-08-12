@@ -133,13 +133,13 @@ if __name__ == '__main__':
             bceloss = bce_criterion(pos_logits[indices], pos_labels[indices])
             bceloss += bce_criterion(neg_logits[indices], neg_labels[indices])
 
-            def compute_infonce_loss(self, seq_embs, pos_embs, neg_embs, loss_mask, temperature=0.1):
+            def compute_infonce_loss(seq_embs, pos_embs, neg_embs, loss_mask, temperature=0.1):
                 hidden_size = neg_embs.size (-1)
-                seq_embs = seq_embs / seq_embs.norm(dim=-1, keepdim=True)
-                pos_embs = pos_embs / pos_embs.norm(dim=-1, keepdim=True)
+                seq_embs = seq_embs / seq_embs.norm(dim=-1, keepdim=True) + 1e-8
+                pos_embs = pos_embs / pos_embs.norm(dim=-1, keepdim=True) + 1e-8
                 pos_logits = F.cosine_similarity(seq_embs, pos_embs, dim=-1).unsqueeze(-1)
                 writer.add_scalar("Model/nce_pos_logits", pos_logits.mean().item())
-                neg_embs = neg_embs / neg_embs.norm(dim=-1, keepdim=True)
+                neg_embs = neg_embs / neg_embs.norm(dim=-1, keepdim=True) + 1e-8
 
                 neg_embedding_all = neg_embs.reshape(-1, hidden_size)
                 neg_logits = torch.matmul(seq_embs, neg_embedding_all.transpose(-1, -2))
@@ -154,9 +154,9 @@ if __name__ == '__main__':
             mask = (next_token_type == 1).to(args.device)
 
             loss_triplet = compute_triplet_loss(pos_logits, neg_logits, mask, margin=1.0)
-            loss_infonce = compute_infonce_loss(pos_logits, neg_logits, mask, temperature=0.1)
+            loss_infonce = compute_infonce_loss(seq_embs, pos_embs, neg_embs, mask, temperature=0.1)
 
-            loss = 0.2 * loss_triplet + 0.5 * loss_infonce + 0.3 * bceloss
+            loss = 0.5 * loss_triplet + 0.05 * loss_infonce + 0.45 * bceloss
 
 
             log_json = json.dumps(
@@ -168,13 +168,16 @@ if __name__ == '__main__':
 
             writer.add_scalar('Loss/train_triplet', loss_triplet.item(), global_step)
             writer.add_scalar('Loss/train_infonce', loss_infonce.item(), global_step)
+            writer.add_scalar('Loss/train_bce', bceloss.item(), global_step)
             writer.add_scalar('Loss/train', loss.item(), global_step)
+            writer.add_scalar("Embed/item_emb_norm", model.item_emb.weight.norm().item(), global_step)
 
             global_step += 1
 
             for param in model.item_emb.parameters():
                 loss += args.l2_emb * torch.norm(param)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
 
         model.eval()
