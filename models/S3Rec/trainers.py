@@ -142,19 +142,19 @@ class PretrainTrainer(Trainer):
                f'MAP-{self.args.map_weight}-' \
                f'SP-{self.args.sp_weight}'
 
-        pretrain_data_iter = tqdm.tqdm(enumerate(pretrain_dataloader),
-                                       desc=f"{self.args.model_name}-{self.args.data_file} Epoch:{epoch}",
-                                       total=len(pretrain_dataloader),
-                                       bar_format="{l_bar}{r_bar}")
-        print_memory("MEMORY BEFORE 'self.model.train'")
+        # pretrain_data_iter = tqdm.tqdm(enumerate(pretrain_dataloader),
+        #                                desc=f"{self.args.model_name}-{self.args.data_file} Epoch:{epoch}",
+        #                                total=len(pretrain_dataloader),
+        #                                bar_format="{l_bar}{r_bar}")
+        print_memory(f"EPOCH: {epoch}, MEMORY BEFORE 'self.model.train'")
         self.model.train()
-        print_memory("MEMORY AFTER 'self.model.train'")
+        # print_memory("MEMORY AFTER 'self.model.train'")
         aap_loss_avg = 0.0
         mip_loss_avg = 0.0
         map_loss_avg = 0.0
         sp_loss_avg = 0.0
 
-        for i, batch in pretrain_data_iter:
+        for i, batch in enumerate(pretrain_dataloader):
             # 0. batch_data will be sent into the device(GPU or CPU)
             attributes, masked_item_sequence, pos_items, neg_items, \
             masked_segment_sequence, pos_segment, neg_segment = batch
@@ -184,8 +184,10 @@ class PretrainTrainer(Trainer):
             mip_loss_avg += mip_loss.item()
             map_loss_avg += map_loss.item()
             sp_loss_avg += sp_loss.item()
+            if (i + 1) % 100 == 0:
+                print("epoch: {d}, aap_loss: {:.4f}, mip_loss: {:.4f}, map_loss: {:.4f}, sp_loss: {:.4f}".format(epoch, aap_loss, mip_loss, map_loss, sp_loss))
 
-        num = len(pretrain_data_iter) * self.args.pre_batch_size
+        num = len(pretrain_dataloader) * self.args.pre_batch_size
         post_fix = {
             "epoch": epoch,
             "aap_loss_avg": '{:.4f}'.format(aap_loss_avg /num),
