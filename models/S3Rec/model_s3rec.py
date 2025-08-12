@@ -10,16 +10,12 @@ class S3RecModel(nn.Module):
     def __init__(self, args):
         super(S3RecModel, self).__init__()
         self.item_embeddings = nn.Embedding(args.item_size, args.hidden_size, padding_idx=0)
-        self.attribute_embeddings = nn.ModuleDict({
-            attr: nn.Embedding(size, args.hidden_size, padding_idx=0)
-            for attr, size in args.attribute_size.items()
-        })  # TODO: 所有attr用一个hidden_size吗？
+        self.attribute_embeddings = nn.Embedding(args.attribute_size, args.hidden_size, padding_idx=0)
         self.position_embeddings = nn.Embedding(args.max_seq_length, args.hidden_size)
         self.item_encoder = Encoder(args)
         self.LayerNorm = LayerNorm(args.hidden_size, eps=1e-12)
         self.dropout = nn.Dropout(args.hidden_dropout_prob)
         self.args = args
-        self.attr_name = self.args.attribute_size.keys()
 
         # add unique dense layer for 4 losses respectively
         self.aap_norm = nn.Linear(args.hidden_size, args.hidden_size)
@@ -39,11 +35,8 @@ class S3RecModel(nn.Module):
         sequence_output = self.aap_norm(sequence_output) # [B L H]
         sequence_output = sequence_output.view([-1, self.args.hidden_size, 1]) # [B*L H 1]
         # [tag_num H] [B*L H 1] -> [B*L tag_num 1]
-        score_sig = {}
-        for attr in self.args.attribute_size.keys():
-            score = torch.matmul(attribute_embedding[attr], sequence_output) # [B*L attribute_num, 1]
-            score_sig[attr] = torch.sigmoid(score.squeeze(-1))
-        return score_sig
+        score = torch.matmul(attribute_embedding, sequence_output)
+        return torch.sigmoid(score.squeeze(-1)) # [B*L tag_num]
 
     # MIP sample neg items
     def masked_item_prediction(self, sequence_output, target_item):
@@ -62,11 +55,8 @@ class S3RecModel(nn.Module):
         sequence_output = self.map_norm(sequence_output)  # [B L H]
         sequence_output = sequence_output.view([-1, self.args.hidden_size, 1])  # [B*L H 1]
         # [tag_num H] [B*L H 1] -> [B*L tag_num 1]
-        score_sig = {}
-        for attr in self.args.attribute_size.keys():
-            score = torch.matmul(attribute_embedding[attr], sequence_output) # [B*L attribute_num, 1]
-            score_sig[attr] = torch.sigmoid(score.squeeze(-1))
-        return score_sig
+        score = torch.matmul(attribute_embedding, sequence_output)
+        return torch.sigmoid(score.squeeze(-1)) # [B*L tag_num]
 
     # SP sample neg segment
     def segment_prediction(self, context, segment):
@@ -107,16 +97,14 @@ class S3RecModel(nn.Module):
         # [B L H]
         sequence_output = encoded_layers[-1]
 
-        attribute_embeddings = {k: self.attribute_embeddings[k].weight for k in self.attr_name}
+        attribute_embeddings = self.attribute_embeddings.weight
         # AAP
         aap_score = self.associated_attribute_prediction(sequence_output, attribute_embeddings)
+        aap_loss = self.criterion(aap_score, attributes.view(-1, self.args.attribute_size).float())
         # only compute loss at non-masked position
         aap_mask = (masked_item_sequence != self.args.mask_id).float() * \
                          (masked_item_sequence != 0).float()
-        aap_loss_dict = {k: self.criterion(aap_score[k], attributes[k].view(-1, self.args.attribute_size[k]).float()) for k in self.attr_name}
-        aap_loss = 0
-        for k in self.attr_name:
-            aap_loss += torch.sum(aap_loss_dict[k] * aap_mask.flatten().unsqueeze(-1)) / 100000  # TODO: equal loss weight ?
+        aap_loss = torch.sum(aap_loss * aap_mask.flatten().unsqueeze(-1))
 
         # MIP
         pos_item_embs = self.item_embeddings(pos_items)
@@ -130,11 +118,9 @@ class S3RecModel(nn.Module):
 
         # MAP
         map_score = self.masked_attribute_prediction(sequence_output, attribute_embeddings)
-        map_loss_dict = {k: self.criterion(map_score[k], attributes[k].view(-1, self.args.attribute_size[k]).float()) for k in self.attr_name}
+        map_loss = self.criterion(map_score, attributes.view(-1, self.args.attribute_size).float())
         map_mask = (masked_item_sequence == self.args.mask_id).float()
-        map_loss = 0
-        for k in self.attr_name:
-            map_loss += torch.sum(map_loss_dict[k] * map_mask.flatten().unsqueeze(-1)) / 50000  # # TODO: equal loss weight ? 
+        map_loss = torch.sum(map_loss * map_mask.flatten().unsqueeze(-1))
 
         # SP
         # segment context

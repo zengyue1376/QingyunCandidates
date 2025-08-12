@@ -68,7 +68,7 @@ class PretrainDataset(Dataset):
         self.item_size = item_size
         self.attribute_size = attribute_size
         self.item2attribute = item2attribute
-        self.attr_name = self.attribute_size.keys()
+        # self.attr_name = self.attribute_size.keys()
         # self.user_seq = user_seq
         # self.long_sequence = long_sequence
         self.max_len = args.max_seq_length
@@ -165,26 +165,19 @@ class PretrainDataset(Dataset):
         # Associated Attribute Prediction
         # Masked Attribute Prediction
         # 有很多个attr，用dict保存
-        attributes = defaultdict(list)
-        for attr in self.attr_name:
-            for item in pos_items:
-                attribute = [0] * self.attribute_size[attr]
-                try:
-                    now_attribute = self.item2attribute[str(item)][attr]
-                    if isinstance(now_attribute, list):
-                        for a in now_attribute:
-                            attribute[a] = 1
-                    elif isinstance(now_attribute, int):
-                        attribute[now_attribute] = 1
-                    else:
-                        assert 0, "wrong instance"
-                except:
-                    pass
-                attributes[attr].append(list(attribute))
+        attributes = []
+        for item in pos_items:
+            attribute = [0] * self.attribute_size
+            try:
+                now_attribute = self.item2attribute[str(item)]
+                for a in now_attribute:
+                    attribute[a] = 1
+            except:
+                pass
+            attributes.append(attribute)
 
 
-        for attr in self.attr_name:
-            assert len(attributes[attr]) == self.max_len, f"{attr} do not match the max_len"
+        assert len(attributes) == self.max_len
         assert len(masked_item_sequence) == self.max_len
         assert len(pos_items) == self.max_len
         assert len(neg_items) == self.max_len
@@ -192,11 +185,8 @@ class PretrainDataset(Dataset):
         assert len(pos_segment) == self.max_len
         assert len(neg_segment) == self.max_len
 
-        for attr, value in attributes.items():
-            attributes[attr] = torch.tensor(value, dtype=torch.long)
 
-
-        cur_tensors = (attributes,  # 这是一个dict
+        cur_tensors = (torch.tensor(attributes, dtype=torch.long),
                        torch.tensor(masked_item_sequence, dtype=torch.long),
                        torch.tensor(pos_items, dtype=torch.long),
                        torch.tensor(neg_items, dtype=torch.long),
@@ -204,21 +194,6 @@ class PretrainDataset(Dataset):
                        torch.tensor(pos_segment, dtype=torch.long),
                        torch.tensor(neg_segment, dtype=torch.long),)
         return cur_tensors
-    
-    def collate_fn(batch):
-        attributes, masked_item_sequence, pos_items, neg_items, masked_segment_sequence, pos_segment, neg_segment = zip(*batch)
-        collated_attributes = {}
-        keys = attributes[0].keys()
-        for k in keys:
-            collated_attributes[k] = torch.stack([d[k] for d in attributes])
-        
-        masked_item_sequence = torch.stack(masked_item_sequence)
-        pos_items = torch.stack(pos_items)
-        neg_items = torch.stack(neg_items)
-        masked_segment_sequence = torch.stack(masked_segment_sequence)
-        pos_segment = torch.stack(pos_segment)
-        neg_segment = torch.stack(neg_segment)
-        return collated_attributes, masked_item_sequence, pos_items, neg_items, masked_segment_sequence, pos_segment, neg_segment
 
     def load_data_and_offsets(self):
         self.data_file = open(Path(self.data_dir, "seq.jsonl"), 'rb')

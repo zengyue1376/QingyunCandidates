@@ -388,29 +388,27 @@ def parse_item_set(data_dir):
     max_item = len(item2attribute)  # 统计总共有多少分item
 
     # 统计每个离散特征对应多少个attr
-    feat_item_sparse = {
-        '100':set(), # 6
-        '117':set(), # 285
-        # '111':set(), # 58734s
-        '118':set(),
-        '101':set(),
-        # '102':set(), # 11136
-        '119':set(),
-        '120':set(),
-        '114':set(),
-        '112':set(), 
-        # '121':set(), # 49079
-        '115':set(),
-        # '122':set(), # 11151
-        '116':set(),
-    }
+    # feat_item_sparse = {
+    #     '100':set(), # 6
+    #     '117':set(), # 285
+    #     # '111':set(), # 58734s
+    #     '118':set(),
+    #     '101':set(),
+    #     # '102':set(), # 11136
+    #     '119':set(),
+    #     '120':set(),
+    #     '114':set(),
+    #     '112':set(), 
+    #     # '121':set(), # 49079
+    #     '115':set(),
+    #     # '122':set(), # 11151
+    #     '116':set(),
+    # }
+    attr_set =set()
     for item_idx, attrs in item2attribute.items():
-        for attr in feat_item_sparse.keys():
-            if attr in attrs.keys():
-                feat_item_sparse[attr].add(attrs[attr])
-    feat_item_sparse_attr_size = {}
-    for attr, items in feat_item_sparse.items():
-        feat_item_sparse_attr_size[attr] = max(items)
+        if "100" in attrs.keys():
+            attr_set.add(attrs["100"])
+    feat_item_sparse_attr_size = len(attr_set)
 
     return max_item, feat_item_sparse_attr_size, item2attribute
     

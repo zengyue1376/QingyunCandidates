@@ -86,7 +86,7 @@ def main():
 
     args.item_size = max_item + 2
     args.mask_id = max_item + 1
-    args.attribute_size = {k:v + 1 for k, v in attribute_size.items()}
+    args.attribute_size = attribute_size + 1
     # save model args
     print(args)
     args.log_file = log_file

@@ -156,17 +156,9 @@ class PretrainTrainer(Trainer):
 
         for i, batch in enumerate(pretrain_dataloader):
             # 0. batch_data will be sent into the device(GPU or CPU)
+            batch = tuple(t.to(self.device) for t in batch)
             attributes, masked_item_sequence, pos_items, neg_items, \
             masked_segment_sequence, pos_segment, neg_segment = batch
-            # print_memory("MEMORY AFTER 'attributes, masked_item_sequence, pos_items, neg_items, masked_segment_sequence, pos_segment, neg_segment = batch'")
-            attributes = {k: v.to(self.device) for k, v in attributes.items()}
-            masked_item_sequence = masked_item_sequence.to(self.device)
-            pos_items = pos_items.to(self.device)
-            neg_items = neg_items.to(self.device)
-            masked_segment_sequence = masked_segment_sequence.to(self.device)
-            pos_segment = pos_segment.to(self.device)
-            neg_segment = neg_segment.to(self.device)
-            # print_memory("MEMORY AFTER 'data.to(self.device)'")
 
             aap_loss, mip_loss, map_loss, sp_loss = self.model.pretrain(attributes,
                                             masked_item_sequence, pos_items, neg_items,
