@@ -184,8 +184,8 @@ class PretrainTrainer(Trainer):
             mip_loss_avg += mip_loss.item()
             map_loss_avg += map_loss.item()
             sp_loss_avg += sp_loss.item()
-            if (i + 1) % 100 == 0:
-                print("epoch: {d}, aap_loss: {:.4f}, mip_loss: {:.4f}, map_loss: {:.4f}, sp_loss: {:.4f}".format(epoch, aap_loss, mip_loss, map_loss, sp_loss))
+            if i % 100 == 0:
+                print("EPOCH {:d} STEP {:d}: aap_loss: {:.4f}, mip_loss: {:.4f}, map_loss: {:.4f}, sp_loss: {:.4f}".format(epoch, i, aap_loss, mip_loss, map_loss, sp_loss))
 
         num = len(pretrain_dataloader) * self.args.pre_batch_size
         post_fix = {
